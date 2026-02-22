@@ -1,0 +1,20 @@
+{
+  "repoRoots": ["~/Developer/promptping-ai"],
+  "projectMapping": {
+    "corporateRoots": ["~/Developer/promptping-ai"],
+    "clientRootBase": "~/Developer",
+    "project3Id": "PVT_kwDODtlhAc4BKpro",
+    "project4Id": "PVT_kwDODtlhAc4BMY-w",
+    "project3Name": "promptping-marketplace launch",
+    "project4Name": "Vente Publique - Roadmap"
+  },
+  "notifications": {
+    "minSeverity": "medium",
+    "notifyOnFailures": true,
+    "notifyOnNewComments": true
+  },
+  "llmScoring": {
+    "enabled": false,
+    "provider": "claude"
+  }
+}

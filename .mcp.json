@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "codex-monitor": {
+      "command": "codex-monitor",
+      "args": ["mcp"],
+      "env": {
+        "PATH": "$HOME/.swiftpm/bin:/usr/local/bin:/usr/bin:/bin"
+      }
+    },
+    "claude": {
+      "command": "claude",
+      "args": ["mcp", "serve", "--transport", "stdio"],
+      "env": {
+        "PATH": "$HOME/.swiftpm/bin:/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}

@@ -2,8 +2,6 @@ name: CI
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
   pull_request:  # No branch filter - allows stacked PRs!
 
 permissions:

@@ -92,6 +92,127 @@ public struct AzureProvider: PRProvider {
     _ = try await cli.execute(executable: azPath, arguments: args)
   }
 
+  public func submitReview(
+    prIdentifier: String,
+    submission: ReviewSubmission,
+    repo: String?
+  ) async throws -> ReviewSubmissionResult {
+    let azPath = try await cli.findExecutable(name: "az")
+
+    var reviewPosted = false
+
+    // Step 1: Set vote based on decision
+    // Azure vote values: approve, approve-with-suggestions, wait-for-author, reject, reset
+    let vote: String
+    switch submission.decision {
+    case .approve: vote = "approve"
+    case .requestChanges: vote = "wait-for-author"
+    case .comment: vote = "reset"  // No vote, just commenting
+    }
+
+    var voteArgs = [
+      "repos", "pr", "set-vote",
+      "--id", prIdentifier,
+      "--vote", vote,
+    ]
+    if let repo = repo {
+      voteArgs.append(contentsOf: ["--repository", repo])
+    }
+    _ = try await cli.execute(executable: azPath, arguments: voteArgs)
+    reviewPosted = true
+
+    // Step 2: Post summary as a top-level thread
+    let summaryPrefix =
+      switch submission.decision {
+      case .approve: "**Approved**\n\n"
+      case .requestChanges: "**Changes Requested**\n\n"
+      case .comment: ""
+      }
+
+    let summaryBody = "\(summaryPrefix)\(submission.summary)"
+    let summaryThreadBody: [String: Any] = [
+      "comments": [["content": summaryBody]],
+      "status": "active",
+    ]
+    let summaryJSON = try JSONSerialization.data(withJSONObject: summaryThreadBody)
+
+    // Fetch PR details to get project/repo for thread creation
+    let prShowArgs = ["repos", "pr", "show", "--id", prIdentifier, "--output", "json"]
+    let prOutput = try await cli.execute(executable: azPath, arguments: prShowArgs)
+    let decoder = JSONDecoder()
+    let azurePR = try decoder.decode(AzurePR.self, from: Data(prOutput))
+
+    let createThreadArgs = [
+      "devops", "invoke",
+      "--area", "git",
+      "--resource", "pullRequestThreads",
+      "--route-parameters",
+      "project=\(azurePR.repository.project.name)",
+      "repositoryId=\(azurePR.repository.name)",
+      "pullRequestId=\(prIdentifier)",
+      "--http-method", "POST",
+      "--in-file", "/dev/stdin",
+      "--output", "json",
+    ]
+
+    _ = try await cli.execute(
+      executable: azPath,
+      arguments: createThreadArgs,
+      stdin: Array(summaryJSON)
+    )
+
+    // Step 3: Post inline comments as threads with file context
+    var commentsPosted = 0
+    var failures: [InlineCommentFailure] = []
+
+    for comment in submission.comments {
+      do {
+        let body = Self.formatCommentBody(comment)
+        let threadBody: [String: Any] = [
+          "comments": [["content": body]],
+          "status": "active",
+          "threadContext": [
+            "filePath": "/\(comment.path)",
+            "rightFileStart": ["line": comment.line, "offset": 1],
+            "rightFileEnd": ["line": comment.line, "offset": 1],
+          ],
+        ]
+
+        let threadJSON = try JSONSerialization.data(withJSONObject: threadBody)
+
+        _ = try await cli.execute(
+          executable: azPath,
+          arguments: createThreadArgs,
+          stdin: Array(threadJSON)
+        )
+        commentsPosted += 1
+      } catch {
+        failures.append(
+          InlineCommentFailure(comment: comment, reason: error.localizedDescription))
+      }
+    }
+
+    return ReviewSubmissionResult(
+      reviewPosted: reviewPosted,
+      commentsPosted: commentsPosted,
+      commentsFailed: failures.count,
+      failures: failures
+    )
+  }
+
+  /// Format a comment body with optional severity prefix
+  private static func formatCommentBody(_ comment: ReviewLineComment) -> String {
+    guard let severity = comment.severity else { return comment.body }
+    let prefix: String
+    switch severity {
+    case .critical: prefix = "**[Critical]**"
+    case .warning: prefix = "**[Warning]**"
+    case .suggestion: prefix = "**[Suggestion]**"
+    case .nitpick: prefix = "**[Nitpick]**"
+    }
+    return "\(prefix) \(comment.body)"
+  }
+
   public func isAvailable() async -> Bool {
     return await cli.isInstalled("az")
   }

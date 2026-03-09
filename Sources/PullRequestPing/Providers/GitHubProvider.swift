@@ -285,6 +285,79 @@ public struct GitHubProvider: PRProvider {
     }
   }
 
+  public func submitReview(
+    prIdentifier: String,
+    submission: ReviewSubmission,
+    repo: String?
+  ) async throws -> ReviewSubmissionResult {
+    let ghPath = try await cli.findExecutable(name: "gh")
+    let (owner, repoName) = try await parseRepoIdentifier(repo)
+
+    // Build the review JSON body for GitHub's Create Review API
+    var reviewBody: [String: Any] = [
+      "event": submission.decision.rawValue,
+      "body": submission.summary,
+    ]
+
+    if let commitSHA = submission.commitSHA {
+      reviewBody["commit_id"] = commitSHA
+    }
+
+    // Add inline comments in GitHub's format
+    if !submission.comments.isEmpty {
+      reviewBody["comments"] = submission.comments.map { comment -> [String: Any] in
+        var dict: [String: Any] = [
+          "path": comment.path,
+          "line": comment.line,
+          "body": Self.formatCommentBody(comment),
+        ]
+        // Use "side" = "RIGHT" for new file lines
+        dict["side"] = "RIGHT"
+        return dict
+      }
+    }
+
+    // Serialize to JSON and pipe via stdin
+    let jsonData = try JSONSerialization.data(withJSONObject: reviewBody)
+
+    let args = [
+      "api",
+      "-X", "POST",
+      "repos/\(owner)/\(repoName)/pulls/\(prIdentifier)/reviews",
+      "--input", "-",
+    ]
+
+    let output = try await cli.execute(
+      executable: ghPath,
+      arguments: args,
+      stdin: Array(jsonData)
+    )
+
+    // Parse response for review URL
+    let decoder = JSONDecoder()
+    let response = try? decoder.decode(GitHubReviewResponse.self, from: Data(output))
+
+    return ReviewSubmissionResult(
+      reviewPosted: true,
+      commentsPosted: submission.comments.count,
+      commentsFailed: 0,
+      reviewURL: response?.htmlURL
+    )
+  }
+
+  /// Format a comment body with optional severity prefix
+  private static func formatCommentBody(_ comment: ReviewLineComment) -> String {
+    guard let severity = comment.severity else { return comment.body }
+    let prefix: String
+    switch severity {
+    case .critical: prefix = "**[Critical]**"
+    case .warning: prefix = "**[Warning]**"
+    case .suggestion: prefix = "**[Suggestion]**"
+    case .nitpick: prefix = "**[Nitpick]**"
+    }
+    return "\(prefix) \(comment.body)"
+  }
+
   public func isAvailable() async -> Bool {
     return await cli.isInstalled("gh")
   }

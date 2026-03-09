@@ -38,7 +38,7 @@ struct PullRequestPingCommand: AsyncParsableCommand {
         pull-request-ping reply 29 --message "Done!"      # Reply to PR
         pull-request-ping reply 29 -m "Bien!" --translate-to en  # Reply in English
       """,
-    subcommands: [View.self, Reply.self, ReplyTo.self, Resolve.self],
+    subcommands: [View.self, Reply.self, ReplyTo.self, Resolve.self, ReviewGroup.self],
     defaultSubcommand: View.self
   )
 }
@@ -320,7 +320,7 @@ struct View: AsyncParsableCommand {
           lines.append("")
           for comment in comments {
             let location = comment.line.map { ":\($0)" } ?? ""
-            lines.append("📍 `\(comment.path)\(location)`")
+            lines.append("📍 `\(comment.path ?? "")\(location)`")
             lines.append("")
             lines.append(comment.body)
             lines.append("")
@@ -674,7 +674,7 @@ private func parseLanguage(_ code: String) throws -> Language {
   return lang
 }
 
-private func parseProviderType(_ str: String?) throws -> ProviderType? {
+func parseProviderType(_ str: String?) throws -> ProviderType? {
   guard let str = str else { return nil }
   // Match case-insensitively against known provider names
   switch str.lowercased() {

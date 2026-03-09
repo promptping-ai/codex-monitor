@@ -138,7 +138,7 @@ public struct GitLabProvider: PRProvider {
 
     let summaryBody = "\(summaryPrefix)\(submission.summary)"
     var noteArgs: [String] = [
-      "api", "-X", "POST",
+      "api", "--method", "POST",
       "projects/:id/merge_requests/\(prIdentifier)/notes",
       "-f", "body=\(summaryBody)",
     ]
@@ -152,42 +152,51 @@ public struct GitLabProvider: PRProvider {
     var commentsPosted = 0
     var failures: [InlineCommentFailure] = []
 
-    for comment in submission.comments {
-      do {
-        let body = Self.formatCommentBody(comment)
-        // GitLab discussions API with position for inline comments
-        let positionJSON: [String: Any] = [
-          "base_sha": submission.commitSHA ?? "HEAD",
-          "head_sha": submission.commitSHA ?? "HEAD",
-          "start_sha": submission.commitSHA ?? "HEAD",
-          "new_path": comment.path,
-          "old_path": comment.path,
-          "new_line": comment.line,
-          "position_type": "text",
-        ]
+    if !submission.comments.isEmpty {
+      // Fetch MR diff_refs for valid commit SHAs (required by GitLab Discussions API)
+      let diffRefs = try await fetchDiffRefs(
+        mrIdentifier: prIdentifier, repo: repo, glabPath: glabPath)
 
-        let discussionBody: [String: Any] = [
-          "body": body,
-          "position": positionJSON,
-        ]
+      for comment in submission.comments {
+        do {
+          let body = comment.formattedBody
+          // GitLab discussions API with position for inline comments
+          let positionJSON: [String: Any] = [
+            "base_sha": submission.commitSHA ?? diffRefs.baseSHA,
+            "head_sha": submission.commitSHA ?? diffRefs.headSHA,
+            "start_sha": submission.commitSHA ?? diffRefs.startSHA,
+            "new_path": comment.path,
+            "old_path": comment.path,
+            "new_line": comment.line,
+            "position_type": "text",
+          ]
 
-        let jsonData = try JSONSerialization.data(withJSONObject: discussionBody)
+          let discussionBody: [String: Any] = [
+            "body": body,
+            "position": positionJSON,
+          ]
 
-        let discussionArgs: [String] = [
-          "api", "-X", "POST",
-          "projects/:id/merge_requests/\(prIdentifier)/discussions",
-          "--input", "-",
-        ]
+          let jsonData = try JSONSerialization.data(withJSONObject: discussionBody)
 
-        _ = try await cli.execute(
-          executable: glabPath,
-          arguments: discussionArgs,
-          stdin: Array(jsonData)
-        )
-        commentsPosted += 1
-      } catch {
-        failures.append(
-          InlineCommentFailure(comment: comment, reason: error.localizedDescription))
+          var discussionArgs: [String] = [
+            "api", "--method", "POST",
+            "projects/:id/merge_requests/\(prIdentifier)/discussions",
+            "--input", "-",
+          ]
+          if let repo = repo {
+            discussionArgs.append(contentsOf: ["--repo", repo])
+          }
+
+          _ = try await cli.execute(
+            executable: glabPath,
+            arguments: discussionArgs,
+            stdin: Array(jsonData)
+          )
+          commentsPosted += 1
+        } catch {
+          failures.append(
+            InlineCommentFailure(comment: comment, reason: error.localizedDescription))
+        }
       }
     }
 
@@ -199,17 +208,38 @@ public struct GitLabProvider: PRProvider {
     )
   }
 
-  /// Format a comment body with optional severity prefix
-  private static func formatCommentBody(_ comment: ReviewLineComment) -> String {
-    guard let severity = comment.severity else { return comment.body }
-    let prefix: String
-    switch severity {
-    case .critical: prefix = "**[Critical]**"
-    case .warning: prefix = "**[Warning]**"
-    case .suggestion: prefix = "**[Suggestion]**"
-    case .nitpick: prefix = "**[Nitpick]**"
+  /// Diff refs from a GitLab MR needed for inline discussion positioning
+  private struct DiffRefs {
+    let baseSHA: String
+    let headSHA: String
+    let startSHA: String
+  }
+
+  /// Fetch the MR's diff_refs (base, head, start SHAs) from the GitLab API
+  private func fetchDiffRefs(
+    mrIdentifier: String,
+    repo: String?,
+    glabPath: Subprocess.Executable
+  ) async throws -> DiffRefs {
+    var args = [
+      "api", "projects/:id/merge_requests/\(mrIdentifier)",
+    ]
+    if let repo = repo {
+      args.append(contentsOf: ["--repo", repo])
     }
-    return "\(prefix) \(comment.body)"
+
+    let output = try await cli.execute(executable: glabPath, arguments: args)
+    let json = try JSONSerialization.jsonObject(with: Data(output)) as? [String: Any]
+
+    guard let diffRefs = json?["diff_refs"] as? [String: String],
+      let baseSHA = diffRefs["base_sha"],
+      let headSHA = diffRefs["head_sha"],
+      let startSHA = diffRefs["start_sha"]
+    else {
+      throw PRProviderError.invalidResponse("Could not parse diff_refs from MR response")
+    }
+
+    return DiffRefs(baseSHA: baseSHA, headSHA: headSHA, startSHA: startSHA)
   }
 
   public func isAvailable() async -> Bool {

@@ -384,26 +384,13 @@ public struct GitHubProvider: PRProvider {
         [
           "path": comment.path,
           "line": comment.line,
-          "body": Self.formatCommentBody(comment),
+          "body": comment.formattedBody,
           "side": "RIGHT",
         ]
       }
     }
 
     return try JSONSerialization.data(withJSONObject: reviewBody)
-  }
-
-  /// Format a comment body with optional severity prefix
-  private static func formatCommentBody(_ comment: ReviewLineComment) -> String {
-    guard let severity = comment.severity else { return comment.body }
-    let prefix: String
-    switch severity {
-    case .critical: prefix = "**[Critical]**"
-    case .warning: prefix = "**[Warning]**"
-    case .suggestion: prefix = "**[Suggestion]**"
-    case .nitpick: prefix = "**[Nitpick]**"
-    }
-    return "\(prefix) \(comment.body)"
   }
 
   public func isAvailable() async -> Bool {

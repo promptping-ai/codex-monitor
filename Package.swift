@@ -20,6 +20,11 @@ let package = Package(
       name: "CodexMonitorGRPC",
       targets: ["CodexMonitorGRPC"]
     ),
+    // Statusline session state and PR cache (consumed by claude-statusline)
+    .library(
+      name: "PullRequestPingState",
+      targets: ["PullRequestPingState"]
+    ),
     // Legacy CLI tool (kept for compatibility)
     .executable(
       name: "pull-request-ping",
@@ -115,6 +120,11 @@ let package = Package(
       ]
     ),
 
+    // MARK: - PullRequestPingState (statusline state + cache)
+    .target(
+      name: "PullRequestPingState"
+    ),
+
     .target(
       name: "CodexMonitorDaemon",
       dependencies: [
@@ -130,6 +140,8 @@ let package = Package(
       dependencies: [
         "CodexMonitorCore",
         "CodexMonitorDaemon",
+        "PullRequestPing",
+        "PullRequestPingState",
         .product(name: "MCP", package: "swift-sdk"),
         .product(name: "Logging", package: "swift-log"),
       ]

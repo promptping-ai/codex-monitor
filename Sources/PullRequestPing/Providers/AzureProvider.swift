@@ -101,25 +101,25 @@ public struct AzureProvider: PRProvider {
 
     var reviewPosted = false
 
-    // Step 1: Set vote based on decision
+    // Step 1: Set vote based on decision (skip for comment-only to avoid clearing existing votes)
     // Azure vote values: approve, approve-with-suggestions, wait-for-author, reject, reset
-    let vote: String
     switch submission.decision {
-    case .approve: vote = "approve"
-    case .requestChanges: vote = "wait-for-author"
-    case .comment: vote = "reset"  // No vote, just commenting
+    case .approve, .requestChanges:
+      let vote = submission.decision == .approve ? "approve" : "wait-for-author"
+      var voteArgs = [
+        "repos", "pr", "set-vote",
+        "--id", prIdentifier,
+        "--vote", vote,
+      ]
+      if let repo = repo {
+        voteArgs.append(contentsOf: ["--repository", repo])
+      }
+      _ = try await cli.execute(executable: azPath, arguments: voteArgs)
+      reviewPosted = true
+    case .comment:
+      // Don't set vote for comment-only reviews — "reset" would clear existing votes
+      break
     }
-
-    var voteArgs = [
-      "repos", "pr", "set-vote",
-      "--id", prIdentifier,
-      "--vote", vote,
-    ]
-    if let repo = repo {
-      voteArgs.append(contentsOf: ["--repository", repo])
-    }
-    _ = try await cli.execute(executable: azPath, arguments: voteArgs)
-    reviewPosted = true
 
     // Step 2: Post summary as a top-level thread
     let summaryPrefix =
@@ -137,7 +137,10 @@ public struct AzureProvider: PRProvider {
     let summaryJSON = try JSONSerialization.data(withJSONObject: summaryThreadBody)
 
     // Fetch PR details to get project/repo for thread creation
-    let prShowArgs = ["repos", "pr", "show", "--id", prIdentifier, "--output", "json"]
+    var prShowArgs = ["repos", "pr", "show", "--id", prIdentifier, "--output", "json"]
+    if let repo = repo {
+      prShowArgs.append(contentsOf: ["--repository", repo])
+    }
     let prOutput = try await cli.execute(executable: azPath, arguments: prShowArgs)
     let decoder = JSONDecoder()
     let azurePR = try decoder.decode(AzurePR.self, from: Data(prOutput))
@@ -167,7 +170,7 @@ public struct AzureProvider: PRProvider {
 
     for comment in submission.comments {
       do {
-        let body = Self.formatCommentBody(comment)
+        let body = comment.formattedBody
         let threadBody: [String: Any] = [
           "comments": [["content": body]],
           "status": "active",
@@ -198,19 +201,6 @@ public struct AzureProvider: PRProvider {
       commentsFailed: failures.count,
       failures: failures
     )
-  }
-
-  /// Format a comment body with optional severity prefix
-  private static func formatCommentBody(_ comment: ReviewLineComment) -> String {
-    guard let severity = comment.severity else { return comment.body }
-    let prefix: String
-    switch severity {
-    case .critical: prefix = "**[Critical]**"
-    case .warning: prefix = "**[Warning]**"
-    case .suggestion: prefix = "**[Suggestion]**"
-    case .nitpick: prefix = "**[Nitpick]**"
-    }
-    return "\(prefix) \(comment.body)"
   }
 
   public func isAvailable() async -> Bool {

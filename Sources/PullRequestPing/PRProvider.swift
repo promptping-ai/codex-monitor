@@ -42,6 +42,18 @@ public protocol PRProvider: Sendable {
     repo: String?
   ) async throws
 
+  /// Submit a review with decision, summary, and optional inline comments
+  /// - Parameters:
+  ///   - prIdentifier: PR number or URL
+  ///   - submission: The review submission containing decision, summary, and comments
+  ///   - repo: Optional repository identifier
+  /// - Returns: Result indicating success/failure and any comment posting failures
+  func submitReview(
+    prIdentifier: String,
+    submission: ReviewSubmission,
+    repo: String?
+  ) async throws -> ReviewSubmissionResult
+
   /// Check if the provider's CLI tool is available
   func isAvailable() async -> Bool
 }

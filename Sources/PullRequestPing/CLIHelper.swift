@@ -86,6 +86,28 @@ public struct CLIHelper: Sendable {
     return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
+  /// Execute a command with stdin input and return stdout
+  public func execute(
+    executable: Subprocess.Executable,
+    arguments: [String],
+    stdin stdinBytes: [UInt8]
+  ) async throws -> [UInt8] {
+    let result = try await Subprocess.run(
+      executable,
+      arguments: Arguments(arguments),
+      input: .bytes(stdinBytes),
+      output: .bytes(limit: 10 * 1024 * 1024),
+      error: .bytes(limit: 1024 * 1024)
+    )
+
+    guard result.terminationStatus.isSuccess else {
+      let stderr = String(decoding: result.standardError, as: UTF8.self)
+      throw PRProviderError.commandFailed(arguments.joined(separator: " "), stderr: stderr)
+    }
+
+    return result.standardOutput
+  }
+
   // MARK: - GraphQL Support
 
   /// Execute a GraphQL query/mutation via `gh api graphql`

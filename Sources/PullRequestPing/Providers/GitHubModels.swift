@@ -108,3 +108,16 @@ struct GitHubResolvedThread: Codable {
   let id: String
   let isResolved: Bool
 }
+
+// MARK: - Review Submission Response
+
+/// Response from POST /repos/{owner}/{repo}/pulls/{pr}/reviews
+struct GitHubReviewResponse: Codable {
+  let id: Int
+  let htmlURL: String?
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case htmlURL = "html_url"
+  }
+}

@@ -95,7 +95,7 @@ public struct CLIHelper: Sendable {
     let result = try await Subprocess.run(
       executable,
       arguments: Arguments(arguments),
-      input: .bytes(stdinBytes),
+      input: .array(stdinBytes),
       output: .bytes(limit: 10 * 1024 * 1024),
       error: .bytes(limit: 1024 * 1024)
     )

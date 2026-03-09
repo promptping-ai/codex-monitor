@@ -100,3 +100,20 @@ public struct ReviewSubmissionResult: Sendable, Codable {
     self.reviewURL = reviewURL
   }
 }
+
+// MARK: - Comment Formatting
+
+extension ReviewLineComment {
+  /// Format the comment body with an optional severity prefix (e.g. "**[Critical]** ...")
+  public var formattedBody: String {
+    guard let severity else { return body }
+    let prefix: String
+    switch severity {
+    case .critical: prefix = "**[Critical]**"
+    case .warning: prefix = "**[Warning]**"
+    case .suggestion: prefix = "**[Suggestion]**"
+    case .nitpick: prefix = "**[Nitpick]**"
+    }
+    return "\(prefix) \(body)"
+  }
+}

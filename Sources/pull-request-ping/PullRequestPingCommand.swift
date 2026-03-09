@@ -320,7 +320,7 @@ struct View: AsyncParsableCommand {
           lines.append("")
           for comment in comments {
             let location = comment.line.map { ":\($0)" } ?? ""
-            lines.append("📍 `\(comment.path)\(location)`")
+            lines.append("📍 `\(comment.path ?? "")\(location)`")
             lines.append("")
             lines.append(comment.body)
             lines.append("")

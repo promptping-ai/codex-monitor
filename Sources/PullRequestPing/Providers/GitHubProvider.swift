@@ -293,7 +293,83 @@ public struct GitHubProvider: PRProvider {
     let ghPath = try await cli.findExecutable(name: "gh")
     let (owner, repoName) = try await parseRepoIdentifier(repo)
 
+    let apiPath = "repos/\(owner)/\(repoName)/pulls/\(prIdentifier)/reviews"
+    let args = ["api", "-X", "POST", apiPath, "--input", "-"]
+
     // Build the review JSON body for GitHub's Create Review API
+    let jsonData = try buildReviewJSON(submission: submission, includeComments: true)
+
+    do {
+      let output = try await cli.execute(
+        executable: ghPath,
+        arguments: args,
+        stdin: Array(jsonData)
+      )
+
+      let decoder = JSONDecoder()
+      let response = try? decoder.decode(GitHubReviewResponse.self, from: Data(output))
+
+      return ReviewSubmissionResult(
+        reviewPosted: true,
+        commentsPosted: submission.comments.count,
+        commentsFailed: 0,
+        reviewURL: response?.htmlURL
+      )
+    } catch let error as PRProviderError {
+      // Check for specific retryable/reportable errors
+      let errorDescription = error.description
+
+      // Permission denied: GITHUB_TOKEN can't approve own PRs
+      if errorDescription.contains("Can not approve your own pull request")
+        || errorDescription.contains("Not Found")
+          && submission.decision == .approve
+      {
+        throw PRProviderError.commandFailed(
+          "submitReview",
+          stderr:
+            "Cannot approve: GitHub Actions GITHUB_TOKEN lacks permission to approve PRs. "
+            + "Use a PAT or GitHub App token instead."
+        )
+      }
+
+      // Stale diff positions: retry without inline comments
+      if !submission.comments.isEmpty
+        && (errorDescription.contains("pull_request_review_thread")
+          || errorDescription.contains("Validation Failed")
+          || errorDescription.contains("is not part of the diff"))
+      {
+        let retryJSON = try buildReviewJSON(submission: submission, includeComments: false)
+        let retryOutput = try await cli.execute(
+          executable: ghPath,
+          arguments: args,
+          stdin: Array(retryJSON)
+        )
+
+        let decoder = JSONDecoder()
+        let response = try? decoder.decode(GitHubReviewResponse.self, from: Data(retryOutput))
+
+        let failures = submission.comments.map {
+          InlineCommentFailure(comment: $0, reason: "Stale diff position — line no longer in diff")
+        }
+
+        return ReviewSubmissionResult(
+          reviewPosted: true,
+          commentsPosted: 0,
+          commentsFailed: submission.comments.count,
+          failures: failures,
+          reviewURL: response?.htmlURL
+        )
+      }
+
+      throw error
+    }
+  }
+
+  /// Build JSON body for the GitHub Create Review API
+  private func buildReviewJSON(
+    submission: ReviewSubmission,
+    includeComments: Bool
+  ) throws -> Data {
     var reviewBody: [String: Any] = [
       "event": submission.decision.rawValue,
       "body": submission.summary,
@@ -303,46 +379,18 @@ public struct GitHubProvider: PRProvider {
       reviewBody["commit_id"] = commitSHA
     }
 
-    // Add inline comments in GitHub's format
-    if !submission.comments.isEmpty {
+    if includeComments && !submission.comments.isEmpty {
       reviewBody["comments"] = submission.comments.map { comment -> [String: Any] in
-        var dict: [String: Any] = [
+        [
           "path": comment.path,
           "line": comment.line,
           "body": Self.formatCommentBody(comment),
+          "side": "RIGHT",
         ]
-        // Use "side" = "RIGHT" for new file lines
-        dict["side"] = "RIGHT"
-        return dict
       }
     }
 
-    // Serialize to JSON and pipe via stdin
-    let jsonData = try JSONSerialization.data(withJSONObject: reviewBody)
-
-    let args = [
-      "api",
-      "-X", "POST",
-      "repos/\(owner)/\(repoName)/pulls/\(prIdentifier)/reviews",
-      "--input", "-",
-    ]
-
-    let output = try await cli.execute(
-      executable: ghPath,
-      arguments: args,
-      stdin: Array(jsonData)
-    )
-
-    // Parse response for review URL
-    let decoder = JSONDecoder()
-    let response = try? decoder.decode(GitHubReviewResponse.self, from: Data(output))
-
-    return ReviewSubmissionResult(
-      reviewPosted: true,
-      commentsPosted: submission.comments.count,
-      commentsFailed: 0,
-      reviewURL: response?.htmlURL
-    )
+    return try JSONSerialization.data(withJSONObject: reviewBody)
   }
 
   /// Format a comment body with optional severity prefix

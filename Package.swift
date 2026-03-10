@@ -44,8 +44,8 @@ let package = Package(
   dependencies: [
     // Modern async subprocess execution
     .package(
-      url: "https://github.com/swiftlang/swift-subprocess.git",
-      from: "0.1.0"
+      url: "https://github.com/promptping-ai/swift-subprocess.git",
+      branch: "main"
     ),
     // Markdown parsing for translation preservation
     .package(

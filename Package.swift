@@ -70,15 +70,15 @@ let package = Package(
     // MCP SDK for Model Context Protocol server
     .package(
       url: "https://github.com/doozMen/swift-sdk.git",
-      branch: "main"
+      from: "0.10.3"
     ),
     // SQLiteData for type-safe database access (includes GRDB)
+    // Note: main branch uses forked swift-structured-queries that fixes compiler crash;
+    // no semver tag includes this fix yet.
     .package(
       url: "https://github.com/doozMen/sqlite-data.git",
       branch: "main"
     ),
-    // Local LLM for PR comment summarization (optional)
-    .package(path: "../edgeprompt"),
   ],
   targets: [
     // MARK: - PullRequestPing (compat)
@@ -87,7 +87,6 @@ let package = Package(
       dependencies: [
         .product(name: "Subprocess", package: "swift-subprocess"),
         .product(name: "Markdown", package: "swift-markdown"),
-        .product(name: "EdgePromptCore", package: "edgeprompt"),
       ],
       linkerSettings: [
         // Translation.framework for neural machine translation (macOS 14.4+)
@@ -116,7 +115,7 @@ let package = Package(
     .target(
       name: "CodexMonitorGRPC",
       dependencies: [
-        .product(name: "Logging", package: "swift-log"),
+        .product(name: "Logging", package: "swift-log")
       ]
     ),
 
@@ -162,11 +161,11 @@ let package = Package(
     .executableTarget(
       name: "CodexMonitorApp",
       dependencies: [
-        "CodexMonitorCore",
+        "CodexMonitorCore"
       ],
       linkerSettings: [
         .linkedFramework("SwiftUI", .when(platforms: [.macOS])),
-        .linkedFramework("AppKit", .when(platforms: [.macOS]))
+        .linkedFramework("AppKit", .when(platforms: [.macOS])),
       ]
     ),
 

@@ -75,7 +75,7 @@ let package = Package(
     // SQLiteData for type-safe database access (includes GRDB)
     .package(
       url: "https://github.com/doozMen/sqlite-data.git",
-      branch: "main"
+      branch: "fix/ci-swift-version-matrix"
     ),
     // Local LLM for PR comment summarization (optional)
     .package(path: "../edgeprompt"),

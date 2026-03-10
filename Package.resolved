@@ -1,5 +1,5 @@
 {
-  "originHash" : "48d7dd23cea12246dfcd3cb9c2d333c45e62f05e317f498d4279a0e886438aaf",
+  "originHash" : "0bc0e1c26db31327b11f92dd5db9af821bb45d5eae7cfb83ffccdb9da4003e2f",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -211,10 +211,10 @@
     {
       "identity" : "swift-subprocess",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-subprocess.git",
+      "location" : "https://github.com/promptping-ai/swift-subprocess.git",
       "state" : {
-        "revision" : "ba5888ad7758cbcbe7abebac37860b1652af2d9c",
-        "version" : "0.3.0"
+        "branch" : "main",
+        "revision" : "20f5edcf1f05c9f718acc6754e6b84d4f1337bb7"
       }
     },
     {

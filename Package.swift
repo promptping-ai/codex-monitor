@@ -30,6 +30,11 @@ let package = Package(
       name: "pull-request-ping",
       targets: ["pull-request-ping"]
     ),
+    // Focused CLI for inline review comments and change requests
+    .executable(
+      name: "pr-review",
+      targets: ["PRReview"]
+    ),
     // New monitor CLI/daemon
     .executable(
       name: "codex-monitor",
@@ -44,8 +49,8 @@ let package = Package(
   dependencies: [
     // Modern async subprocess execution
     .package(
-      url: "https://github.com/swiftlang/swift-subprocess.git",
-      from: "0.1.0"
+      url: "https://github.com/promptping-ai/swift-subprocess.git",
+      branch: "main"
     ),
     // Markdown parsing for translation preservation
     .package(
@@ -99,6 +104,14 @@ let package = Package(
       dependencies: [
         "PullRequestPing",
         .product(name: "Subprocess", package: "swift-subprocess"),
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ]
+    ),
+
+    .executableTarget(
+      name: "PRReview",
+      dependencies: [
+        "PullRequestPing",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ]
     ),
